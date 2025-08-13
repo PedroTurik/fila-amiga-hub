@@ -1,64 +1,77 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { useQueueStore } from '@/store/queueStore';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useSupabaseQueue, Attendant as AttendantType } from '@/hooks/useSupabaseQueue';
+import { supabase } from '@/integrations/supabase/client';
 import { UserCheck, Phone, CheckCircle, Clock, Star, LogOut } from 'lucide-react';
-import { toast } from '@/hooks/use-toast';
+import { useToast } from '@/components/ui/use-toast';
 
 const Attendant = () => {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [attendantName, setAttendantName] = useState('');
-  const [deskNumber, setDeskNumber] = useState('');
-  const [currentAttendantId, setCurrentAttendantId] = useState('');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [selectedAttendant, setSelectedAttendant] = useState<AttendantType | null>(null);
+  const navigate = useNavigate();
+  const { toast } = useToast();
   
   const { 
-    addAttendant, 
-    removeAttendant, 
-    callNextTicket, 
-    completeTicket, 
     attendants, 
     tickets,
-    getWaitingTickets 
-  } = useQueueStore();
+    callNextTicket,
+    startService,
+    completeService,
+    setAttendantStatus,
+    isLoading
+  } = useSupabaseQueue();
 
-  const handleLogin = () => {
-    if (!attendantName.trim() || !deskNumber.trim()) {
-      toast({
-        title: "Erro",
-        description: "Por favor, preencha todos os campos",
-        variant: "destructive"
-      });
-      return;
-    }
+  useEffect(() => {
+    // Check if user is authenticated
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        navigate('/auth');
+        return;
+      }
+      setIsAuthenticated(true);
+    };
 
-    addAttendant(attendantName.trim(), deskNumber.trim());
-    const attendant = attendants.find(a => a.name === attendantName.trim() && a.deskNumber === deskNumber.trim());
-    if (attendant) {
-      setCurrentAttendantId(attendant.id);
-    } else {
-      // Get the ID of the newly created attendant
-      const newAttendant = attendants[attendants.length - 1];
-      setCurrentAttendantId(newAttendant?.id || '');
-    }
-    setIsLoggedIn(true);
-    
-    toast({
-      title: "Login realizado",
-      description: `Bem-vindo, ${attendantName}!`,
+    checkAuth();
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!session) {
+        navigate('/auth');
+      } else {
+        setIsAuthenticated(true);
+      }
     });
+
+    return () => subscription.unsubscribe();
+  }, [navigate]);
+
+  const handleSelectAttendant = async (attendantId: string) => {
+    const attendant = attendants.find(a => a.id === attendantId);
+    if (attendant) {
+      setSelectedAttendant(attendant);
+      await setAttendantStatus(attendantId, 'available');
+      
+      toast({
+        title: "Login realizado",
+        description: `Bem-vindo à ${attendant.name}!`,
+      });
+    }
   };
 
-  const handleLogout = () => {
-    if (currentAttendantId) {
-      removeAttendant(currentAttendantId);
+  const handleLogout = async () => {
+    if (selectedAttendant) {
+      await setAttendantStatus(selectedAttendant.id, 'offline');
     }
-    setIsLoggedIn(false);
-    setAttendantName('');
-    setDeskNumber('');
-    setCurrentAttendantId('');
+    
+    await supabase.auth.signOut();
+    setSelectedAttendant(null);
+    setIsAuthenticated(false);
+    navigate('/auth');
     
     toast({
       title: "Logout realizado",
@@ -66,78 +79,82 @@ const Attendant = () => {
     });
   };
 
-  const handleCallNext = () => {
-    const ticket = callNextTicket(currentAttendantId, deskNumber);
+  const handleCallNext = async () => {
+    if (!selectedAttendant) return;
+    
+    const ticket = await callNextTicket(selectedAttendant.id);
     if (ticket) {
       toast({
         title: "Cliente chamado",
-        description: `Senha ${ticket.number} chamada para mesa ${deskNumber}`,
-      });
-    } else {
-      toast({
-        title: "Fila vazia",
-        description: "Não há clientes aguardando atendimento",
-        variant: "destructive"
+        description: `Senha ${ticket.number} chamada para ${selectedAttendant.name}`,
       });
     }
   };
 
-  const handleCompleteAttendance = () => {
-    const currentAttendant = attendants.find(a => a.id === currentAttendantId);
-    if (currentAttendant?.currentTicket) {
-      completeTicket(currentAttendant.currentTicket);
-      toast({
-        title: "Atendimento concluído",
-        description: "Cliente atendido com sucesso!",
-      });
-    }
+  const handleStartService = async () => {
+    if (!selectedAttendant?.current_ticket_id) return;
+    
+    await startService(selectedAttendant.current_ticket_id, selectedAttendant.id);
   };
 
-  const waitingTickets = getWaitingTickets();
-  const currentAttendant = attendants.find(a => a.id === currentAttendantId);
-  const currentTicket = currentAttendant?.currentTicket 
-    ? tickets.find(t => t.id === currentAttendant.currentTicket)
+  const handleCompleteService = async () => {
+    if (!selectedAttendant?.current_ticket_id) return;
+    
+    await completeService(selectedAttendant.current_ticket_id, selectedAttendant.id);
+  };
+
+  const waitingTickets = tickets.filter(t => t.status === 'waiting');
+  const currentTicket = selectedAttendant?.current_ticket_id 
+    ? tickets.find(t => t.id === selectedAttendant.current_ticket_id)
     : null;
 
-  if (!isLoggedIn) {
+  if (!isAuthenticated || isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-primary/5 to-accent/5 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardContent className="p-8 text-center">
+            <Clock className="w-16 h-16 mx-auto mb-4 text-primary" />
+            <p className="text-xl">Carregando...</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (!selectedAttendant) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-primary/5 to-accent/5 flex items-center justify-center p-4">
         <Card className="w-full max-w-md">
           <CardHeader>
             <CardTitle className="text-center text-2xl text-primary flex items-center justify-center gap-2">
               <UserCheck className="w-7 h-7" />
-              Login do Atendente
+              Selecionar Mesa
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <Label htmlFor="name">Nome do Atendente</Label>
-              <Input
-                id="name"
-                type="text"
-                value={attendantName}
-                onChange={(e) => setAttendantName(e.target.value)}
-                placeholder="Digite seu nome"
-              />
-            </div>
-            
-            <div>
-              <Label htmlFor="desk">Número da Mesa</Label>
-              <Input
-                id="desk"
-                type="text"
-                value={deskNumber}
-                onChange={(e) => setDeskNumber(e.target.value)}
-                placeholder="Ex: 01, 02, 03..."
-              />
+              <label className="text-sm font-medium">Escolha sua mesa de atendimento:</label>
+              <Select onValueChange={handleSelectAttendant}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Selecione uma mesa" />
+                </SelectTrigger>
+                <SelectContent>
+                  {attendants.map((attendant) => (
+                    <SelectItem key={attendant.id} value={attendant.id}>
+                      {attendant.name} {attendant.status === 'busy' ? '(Ocupada)' : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             
             <Button 
-              onClick={handleLogin}
+              variant="outline"
+              onClick={handleLogout}
               className="w-full"
-              size="lg"
             >
-              Fazer Login
+              <LogOut className="w-4 h-4 mr-2" />
+              Sair do Sistema
             </Button>
           </CardContent>
         </Card>
@@ -155,7 +172,7 @@ const Attendant = () => {
               Painel do Atendente
             </h1>
             <p className="text-xl text-muted-foreground">
-              {attendantName} - Mesa {deskNumber}
+              {selectedAttendant.name}
             </p>
           </div>
           <Button 
@@ -187,8 +204,8 @@ const Attendant = () => {
                           {currentTicket.number}
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="text-lg font-semibold">{currentTicket.category}</span>
-                          {currentTicket.isPriority && (
+                          <span className="text-lg font-semibold">{currentTicket.category?.name}</span>
+                          {currentTicket.is_preferential && (
                             <Badge variant="secondary" className="bg-warning/10 text-warning">
                               <Star className="w-4 h-4 mr-1" />
                               Preferencial
@@ -198,22 +215,38 @@ const Attendant = () => {
                       </div>
                       <div className="text-right">
                         <div className="text-sm text-muted-foreground mb-1">
-                          Chamado às
+                          Status
                         </div>
                         <div className="font-semibold">
-                          {currentTicket.calledAt?.toLocaleTimeString()}
+                          {currentTicket.status === 'called' ? 'Chamado' : 
+                           currentTicket.status === 'being_served' ? 'Em Atendimento' : 'Aguardando'}
                         </div>
                       </div>
                     </div>
                     
-                    <Button 
-                      onClick={handleCompleteAttendance}
-                      className="w-full bg-accent hover:bg-accent/90"
-                      size="lg"
-                    >
-                      <CheckCircle className="w-5 h-5 mr-2" />
-                      Concluir Atendimento
-                    </Button>
+                    <div className="space-y-3">
+                      {currentTicket.status === 'called' && (
+                        <Button 
+                          onClick={handleStartService}
+                          className="w-full bg-primary hover:bg-primary/90"
+                          size="lg"
+                        >
+                          <UserCheck className="w-5 h-5 mr-2" />
+                          Iniciar Atendimento
+                        </Button>
+                      )}
+                      
+                      {currentTicket.status === 'being_served' && (
+                        <Button 
+                          onClick={handleCompleteService}
+                          className="w-full bg-accent hover:bg-accent/90"
+                          size="lg"
+                        >
+                          <CheckCircle className="w-5 h-5 mr-2" />
+                          Concluir Atendimento
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </div>
               ) : (
@@ -262,13 +295,13 @@ const Attendant = () => {
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Preferencial:</span>
                     <span className="font-semibold text-warning">
-                      {waitingTickets.filter(t => t.isPriority).length}
+                      {waitingTickets.filter(t => t.is_preferential).length}
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Normal:</span>
                     <span className="font-semibold text-primary">
-                      {waitingTickets.filter(t => !t.isPriority).length}
+                      {waitingTickets.filter(t => !t.is_preferential).length}
                     </span>
                   </div>
                 </div>
@@ -308,14 +341,14 @@ const Attendant = () => {
                               {ticket.number}
                             </div>
                             <div className="text-xs text-muted-foreground">
-                              {ticket.category}
+                              {ticket.category?.name}
                             </div>
                           </div>
                           <div className="text-right">
                             <div className="text-sm font-semibold">
                               {index + 1}º
                             </div>
-                            {ticket.isPriority && (
+                            {ticket.is_preferential && (
                               <Star className="w-4 h-4 text-warning" />
                             )}
                           </div>

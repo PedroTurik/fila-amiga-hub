@@ -76,7 +76,7 @@ const Index = () => {
                 Interface para atendentes gerenciarem os atendimentos
               </p>
               <Button asChild variant="secondary" className="w-full">
-                <Link to="/auth">
+                <Link to="/attendant">
                   Login Atendente
                 </Link>
               </Button>

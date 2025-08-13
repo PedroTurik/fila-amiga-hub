@@ -2,25 +2,28 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { useSupabaseQueue, Ticket as TicketType } from '@/hooks/useSupabaseQueue';
+import { useQueueStore } from '@/store/queueStore';
 import { Clock, Hash, Star, Users, CheckCircle, Phone } from 'lucide-react';
 
 const Ticket = () => {
   const { ticketId } = useParams<{ ticketId: string }>();
-  const { tickets, getQueuePosition } = useSupabaseQueue();
-  const [ticket, setTicket] = useState<TicketType | null>(null);
+  const { getTicketById, getQueuePosition } = useQueueStore();
+  const [ticket, setTicket] = useState(getTicketById(ticketId || ''));
   const [position, setPosition] = useState(0);
 
   useEffect(() => {
-    if (ticketId) {
-      const foundTicket = tickets.find(t => t.id === ticketId);
-      setTicket(foundTicket || null);
-      
-      if (foundTicket && foundTicket.status === 'waiting') {
-        getQueuePosition(ticketId).then(setPosition);
+    const interval = setInterval(() => {
+      if (ticketId) {
+        const updatedTicket = getTicketById(ticketId);
+        setTicket(updatedTicket);
+        if (updatedTicket && updatedTicket.status === 'waiting') {
+          setPosition(getQueuePosition(ticketId));
+        }
       }
-    }
-  }, [ticketId, tickets, getQueuePosition]);
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [ticketId, getTicketById, getQueuePosition]);
 
   if (!ticket) {
     return (
@@ -55,7 +58,7 @@ const Ticket = () => {
           icon: Phone,
           bgColor: 'bg-warning/10'
         };
-      case 'being_served':
+      case 'attending':
         return {
           title: 'Em Atendimento',
           color: 'text-accent',
@@ -95,7 +98,7 @@ const Ticket = () => {
             <div className="text-6xl font-bold text-primary mb-4">
               {ticket.number}
             </div>
-            {ticket.is_preferential && (
+            {ticket.isPriority && (
               <Badge variant="secondary" className="bg-warning/10 text-warning mb-4">
                 <Star className="w-4 h-4 mr-1" />
                 Preferencial
@@ -104,11 +107,11 @@ const Ticket = () => {
             <div className="space-y-2 text-sm text-muted-foreground">
               <div className="flex items-center justify-center gap-2">
                 <Hash className="w-4 h-4" />
-                <span>{ticket.category?.name}</span>
+                <span>{ticket.category}</span>
               </div>
               <div className="flex items-center justify-center gap-2">
                 <Clock className="w-4 h-4" />
-                <span>Criado às {new Date(ticket.created_at).toLocaleTimeString()}</span>
+                <span>Criado às {ticket.createdAt.toLocaleTimeString()}</span>
               </div>
             </div>
           </CardContent>
@@ -140,7 +143,7 @@ const Ticket = () => {
             {ticket.status === 'called' && (
               <div className="text-center">
                 <div className="text-2xl font-bold text-warning mb-2">
-                  Dirija-se à mesa {ticket.attendant?.desk_number}
+                  Dirija-se à mesa {ticket.deskNumber}
                 </div>
                 <p className="text-muted-foreground">
                   Seu atendimento foi chamado!
@@ -148,10 +151,10 @@ const Ticket = () => {
               </div>
             )}
 
-            {ticket.status === 'being_served' && (
+            {ticket.status === 'attending' && (
               <div className="text-center">
                 <div className="text-xl font-semibold text-accent mb-2">
-                  Mesa {ticket.attendant?.desk_number}
+                  Mesa {ticket.deskNumber}
                 </div>
                 <p className="text-muted-foreground">
                   Você está sendo atendido

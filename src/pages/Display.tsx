@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { useSupabaseQueue } from '@/hooks/useSupabaseQueue';
+import { useQueueStore } from '@/store/queueStore';
 import { Clock, Star, Users, Phone } from 'lucide-react';
 
 const Display = () => {
-  const { tickets, attendants } = useSupabaseQueue();
+  const { tickets, attendants } = useQueueStore();
   const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
@@ -16,19 +16,19 @@ const Display = () => {
   }, []);
 
   const recentCalls = tickets
-    .filter(t => t.status === 'called' && t.called_at)
-    .sort((a, b) => new Date(b.called_at!).getTime() - new Date(a.called_at!).getTime())
+    .filter(t => t.status === 'called' && t.calledAt)
+    .sort((a, b) => (b.calledAt?.getTime() || 0) - (a.calledAt?.getTime() || 0))
     .slice(0, 5);
 
   const waitingTickets = tickets
     .filter(t => t.status === 'waiting')
     .sort((a, b) => {
-      if (a.is_preferential && !b.is_preferential) return -1;
-      if (!a.is_preferential && b.is_preferential) return 1;
-      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      if (a.isPriority && !b.isPriority) return -1;
+      if (!a.isPriority && b.isPriority) return 1;
+      return a.createdAt.getTime() - b.createdAt.getTime();
     });
 
-  const activeAttendants = attendants.filter(a => a.status !== 'offline');
+  const activeAttendants = attendants.filter(a => a.isActive);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/5 to-accent/5 p-6">
@@ -76,8 +76,8 @@ const Display = () => {
                           </div>
                           <div>
                             <div className="flex items-center gap-2 mb-1">
-                              <span className="font-semibold">{ticket.category?.name}</span>
-                              {ticket.is_preferential && (
+                              <span className="font-semibold">{ticket.category}</span>
+                              {ticket.isPriority && (
                                 <Badge variant="secondary" className="bg-warning/10 text-warning">
                                   <Star className="w-3 h-3 mr-1" />
                                   Preferencial
@@ -85,16 +85,16 @@ const Display = () => {
                               )}
                             </div>
                             <div className="text-sm text-muted-foreground">
-                              Chamado às {new Date(ticket.called_at!).toLocaleTimeString()}
+                              Chamado às {ticket.calledAt?.toLocaleTimeString()}
                             </div>
                           </div>
                         </div>
                         <div className="text-right">
                           <div className="text-2xl font-bold text-accent">
-                            Mesa {ticket.attendant?.desk_number}
+                            Mesa {ticket.deskNumber}
                           </div>
                           <div className="text-sm text-muted-foreground">
-                            {ticket.attendant?.name}
+                            {attendants.find(a => a.id === ticket.attendantId)?.name}
                           </div>
                         </div>
                       </div>
@@ -126,13 +126,13 @@ const Display = () => {
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Preferencial:</span>
                     <span className="font-semibold text-warning">
-                      {waitingTickets.filter(t => t.is_preferential).length}
+                      {waitingTickets.filter(t => t.isPriority).length}
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Normal:</span>
                     <span className="font-semibold text-primary">
-                      {waitingTickets.filter(t => !t.is_preferential).length}
+                      {waitingTickets.filter(t => !t.isPriority).length}
                     </span>
                   </div>
                 </div>
@@ -154,15 +154,15 @@ const Display = () => {
                     </p>
                   ) : (
                     activeAttendants.map((attendant) => {
-                      const currentTicket = attendant.current_ticket_id 
-                        ? tickets.find(t => t.id === attendant.current_ticket_id)
+                      const currentTicket = attendant.currentTicket 
+                        ? tickets.find(t => t.id === attendant.currentTicket)
                         : null;
                       
                       return (
                         <div key={attendant.id} className="p-3 rounded-lg bg-muted/50">
                           <div className="flex justify-between items-center">
                             <div>
-                              <div className="font-semibold">Mesa {attendant.desk_number}</div>
+                              <div className="font-semibold">Mesa {attendant.deskNumber}</div>
                               <div className="text-sm text-muted-foreground">
                                 {attendant.name}
                               </div>
@@ -214,13 +214,13 @@ const Display = () => {
                       {ticket.number}
                     </div>
                     <div className="text-sm text-muted-foreground mb-2">
-                      {ticket.category?.name}
+                      {ticket.category}
                     </div>
                     <div className="flex items-center justify-center gap-1">
                       <span className="text-xs text-muted-foreground">
                         {index + 1}º posição
                       </span>
-                      {ticket.is_preferential && (
+                      {ticket.isPriority && (
                         <Star className="w-3 h-3 text-warning" />
                       )}
                     </div>

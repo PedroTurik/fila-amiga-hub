@@ -8,7 +8,6 @@ import Totem from "./pages/Totem";
 import Ticket from "./pages/Ticket";
 import Display from "./pages/Display";
 import Attendant from "./pages/Attendant";
-import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -24,7 +23,6 @@ const App = () => (
           <Route path="/totem" element={<Totem />} />
           <Route path="/ticket/:ticketId" element={<Ticket />} />
           <Route path="/display" element={<Display />} />
-          <Route path="/auth" element={<Auth />} />
           <Route path="/attendant" element={<Attendant />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { useSupabaseQueue } from '@/hooks/useSupabaseQueue';
+import { useQueueStore } from '@/store/queueStore';
 import { QRCodeModal } from '@/components/QRCodeModal';
 import { Users, Clock, Star } from 'lucide-react';
 
@@ -12,8 +12,8 @@ const Totem = () => {
   const [showQRModal, setShowQRModal] = useState(false);
   const [generatedTicket, setGeneratedTicket] = useState<any>(null);
   
-  const { categories, tickets, createTicket, isLoading } = useSupabaseQueue();
-  const waitingCount = tickets.filter(t => t.status === 'waiting').length;
+  const { categories, addTicket, getWaitingTickets } = useQueueStore();
+  const waitingCount = getWaitingTickets().length;
 
   const handleCategorySelect = (category: string) => {
     setSelectedCategory(category);
@@ -23,14 +23,12 @@ const Totem = () => {
     setIsPriority(priority);
   };
 
-  const handleGenerateTicket = async () => {
+  const handleGenerateTicket = () => {
     if (!selectedCategory) return;
     
-    const ticket = await createTicket(selectedCategory, isPriority);
-    if (ticket) {
-      setGeneratedTicket(ticket);
-      setShowQRModal(true);
-    }
+    const ticket = addTicket(selectedCategory, isPriority);
+    setGeneratedTicket(ticket);
+    setShowQRModal(true);
   };
 
   const handleBackToStart = () => {
@@ -63,12 +61,12 @@ const Totem = () => {
           <div className="grid grid-cols-2 gap-6">
             {categories.map((category) => (
               <Card 
-                key={category.id}
+                key={category}
                 className="cursor-pointer transition-all duration-300 hover:shadow-lg hover:scale-105 border-2 hover:border-primary/50"
-                onClick={() => handleCategorySelect(category.id)}
+                onClick={() => handleCategorySelect(category)}
               >
                 <CardHeader className="text-center pb-4">
-                  <CardTitle className="text-2xl text-primary">{category.name}</CardTitle>
+                  <CardTitle className="text-2xl text-primary">{category}</CardTitle>
                 </CardHeader>
                 <CardContent className="text-center">
                   <div className="p-8">
@@ -99,7 +97,7 @@ const Totem = () => {
           </Button>
           
           <h1 className="text-4xl font-bold text-primary mb-4">
-            {categories.find(c => c.id === selectedCategory)?.name}
+            {selectedCategory}
           </h1>
           <p className="text-xl text-muted-foreground">
             Você tem direito a atendimento preferencial?

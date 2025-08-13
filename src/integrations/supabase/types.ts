@@ -14,16 +14,133 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      attendants: {
+        Row: {
+          created_at: string
+          current_ticket_id: string | null
+          desk_number: number
+          id: string
+          name: string
+          status: Database["public"]["Enums"]["attendant_status"]
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          current_ticket_id?: string | null
+          desk_number: number
+          id?: string
+          name: string
+          status?: Database["public"]["Enums"]["attendant_status"]
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          current_ticket_id?: string | null
+          desk_number?: number
+          id?: string
+          name?: string
+          status?: Database["public"]["Enums"]["attendant_status"]
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      categories: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          type: Database["public"]["Enums"]["category_type"]
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          type: Database["public"]["Enums"]["category_type"]
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          type?: Database["public"]["Enums"]["category_type"]
+        }
+        Relationships: []
+      }
+      tickets: {
+        Row: {
+          attendant_id: string | null
+          called_at: string | null
+          category_id: string
+          completed_at: string | null
+          created_at: string
+          id: string
+          is_preferential: boolean
+          number: string
+          served_at: string | null
+          status: Database["public"]["Enums"]["ticket_status"]
+          updated_at: string
+        }
+        Insert: {
+          attendant_id?: string | null
+          called_at?: string | null
+          category_id: string
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          is_preferential?: boolean
+          number: string
+          served_at?: string | null
+          status?: Database["public"]["Enums"]["ticket_status"]
+          updated_at?: string
+        }
+        Update: {
+          attendant_id?: string | null
+          called_at?: string | null
+          category_id?: string
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          is_preferential?: boolean
+          number?: string
+          served_at?: string | null
+          status?: Database["public"]["Enums"]["ticket_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tickets_attendant_id_fkey"
+            columns: ["attendant_id"]
+            isOneToOne: false
+            referencedRelation: "attendants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tickets_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_queue_position: {
+        Args: { ticket_id: string }
+        Returns: number
+      }
     }
     Enums: {
-      [_ in never]: never
+      attendant_status: "available" | "busy" | "offline"
+      category_type: "geral" | "preferencial" | "prioritario"
+      ticket_status:
+        | "waiting"
+        | "called"
+        | "being_served"
+        | "completed"
+        | "cancelled"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +267,16 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      attendant_status: ["available", "busy", "offline"],
+      category_type: ["geral", "preferencial", "prioritario"],
+      ticket_status: [
+        "waiting",
+        "called",
+        "being_served",
+        "completed",
+        "cancelled",
+      ],
+    },
   },
 } as const
